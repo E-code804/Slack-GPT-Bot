@@ -61,24 +61,49 @@ async def handle_summarizepr(request: Request, text: str = Form(...)):
         parts = text.split("/")
         owner, repo, pr_number = parts[3], parts[4], parts[6]
 
-        # Fetch PR data from GitHub API
-        github_api_url = (
-            f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-        )
+        github_token = os.getenv("GITHUB_TOKEN")
+        headers = {}
+        if github_token:
+            headers["Authorization"] = f"token {github_token}"
+
         async with httpx.AsyncClient() as client:
-            resp = await client.get(github_api_url)
-            pr_data = resp.json()
+            # Fetch PR data
+            github_api_url = (
+                f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
+            )
+            pr_resp = await client.get(github_api_url, headers=headers)
+            pr_data = pr_resp.json()
 
-        # Build response message
-        title = pr_data["title"]
-        author = pr_data["user"]["login"]
-        state = pr_data["state"]
-        html_url = pr_data["html_url"]
+            # Fetch PR diff
+            diff_headers = headers.copy()
+            diff_headers["Accept"] = "application/vnd.github.v3.diff"
+            diff_resp = await client.get(github_api_url, headers=diff_headers)
+            diff_content = diff_resp.text
 
-        return PlainTextResponse(
-            f"📌 *{title}*\n👤 Author: {author}\n🔗 {html_url}\n📂 Status: {state}",
-            status_code=200,
-        )
+            # Extract relevant info
+            title = pr_data["title"]
+            description = pr_data["body"] or "No description provided"
+            author = pr_data["user"]["login"]
+            state = pr_data["state"]
+            html_url = pr_data["html_url"]
+
+            # Files changed count
+            files_changed = pr_data.get("changed_files", 0)
+            additions = pr_data.get("additions", 0)
+            deletions = pr_data.get("deletions", 0)
+
+            print(f"PR Title: {title}")
+            print(f"PR Description: {description}")
+            print(f"Files changed: {files_changed}")
+            print(f"Additions: +{additions}, Deletions: -{deletions}")
+            print(f"Diff content length: {len(diff_content)} characters")
+
+            # You can now use diff_content and description with OpenAI
+
+            return PlainTextResponse(
+                f"📌 *{title}*\n👤 Author: {author}\n🔗 {html_url}\n📂 Status: {state}",
+                status_code=200,
+            )
 
     except Exception as e:
         return PlainTextResponse(f"Error parsing PR link: {str(e)}", status_code=200)
