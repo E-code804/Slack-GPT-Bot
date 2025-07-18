@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from openai_summary import PRSummarizer
 import httpx
 
 # Load env variables
@@ -98,20 +99,21 @@ async def handle_summarizepr(request: Request, text: str = Form(...)):
             print(f"Additions: +{additions}, Deletions: -{deletions}")
             print(f"Diff content length: {len(diff_content)} characters")
 
-            # You can now use diff_content and description with OpenAI
+            # Use OpenAI to summarize the PR
+            summarizer = PRSummarizer()
+            summary = summarizer.summarize_pr(title, description, diff_content)
+            # formatted_summary = summarizer.format_summary_for_slack(summary)
 
-            # Print first 1000 characters of diff to see actual changes
-            print(f"Diff preview:\n{diff_content[:1000]}")
-
-            # Parse the diff to extract file changes
-            files_with_changes = parse_diff_for_files(diff_content)
-            print(f"Files with changes: {files_with_changes}")
-
-            # For now, returning basic info
-            return PlainTextResponse(
-                f"📌 *{title}*\n👤 Author: {author}\n📝 Description: {description[:200]}...\n📊 Changes: {files_changed} files, +{additions}/-{deletions}\n🔗 {html_url}\n📂 Status: {state}",
-                status_code=200,
+            # Return the AI-generated summary
+            response_text = f"👤 **Author:** {author}\n"
+            response_text += (
+                f"📊 **Changes:** {files_changed} files, +{additions}/-{deletions}\n"
             )
+            response_text += f"🔗 **Link:** {html_url}\n"
+            response_text += f"📂 **Status:** {state}\n\n"
+            response_text += summary
+
+            return PlainTextResponse(response_text, status_code=200)
 
     except Exception as e:
         return PlainTextResponse(f"Error parsing PR link: {str(e)}", status_code=200)
