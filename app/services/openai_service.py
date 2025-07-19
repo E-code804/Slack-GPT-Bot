@@ -8,7 +8,7 @@ load_dotenv()
 from typing import Dict, List, Optional
 
 
-class PRSummarizer:
+class OpenAIService:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
