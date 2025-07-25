@@ -1,7 +1,7 @@
 import os
 
-from fastapi.responses import PlainTextResponse
 from services.openai_service import OpenAIService
+from services.slack_service import SlackService
 import httpx
 
 
@@ -9,6 +9,7 @@ class PRService:
     def __init__(self):
         self.github_token = os.getenv("GITHUB_TOKEN")
         self.openai_service = OpenAIService()
+        self.slack_service = SlackService()
 
     # Background task to process PR and send result back to Slack
     async def process_pr_summary(self, pr_url: str, response_url: str):
@@ -65,21 +66,23 @@ class PRService:
                 response_text += summary
 
                 # Send the response text back to slack using the response url
-                await self.send_to_slack_response_url(response_url, response_text)
+                await self.slack_service.send_to_slack_response_url(
+                    response_url, response_text
+                )
 
         except Exception as e:
             error_msg = f"❌ Error analyzing PR: {str(e)}"
             await self.send_to_slack_response_url(response_url, error_msg)
 
-    # May want to move this to a slack service.
-    async def send_to_slack_response_url(self, response_url: str, response_text: str):
-        # Send delated response back to slack
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                payload = {
-                    "text": response_text,
-                    "response_type": "in_channel",  # or "ephemeral" for private
-                }
-                await client.post(response_url, json=payload)
-        except Exception as e:
-            print(f"Failed to send response to Slack: {e}")
+    # # May want to move this to a slack service.
+    # async def send_to_slack_response_url(self, response_url: str, response_text: str):
+    #     # Send delated response back to slack
+    #     try:
+    #         async with httpx.AsyncClient(timeout=10.0) as client:
+    #             payload = {
+    #                 "text": response_text,
+    #                 "response_type": "in_channel",  # or "ephemeral" for private
+    #             }
+    #             await client.post(response_url, json=payload)
+    #     except Exception as e:
+    #         print(f"Failed to send response to Slack: {e}")
