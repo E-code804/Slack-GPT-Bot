@@ -30,7 +30,10 @@ async def ping():
 # Slack verification
 @app.post("/")
 async def challenge(request: Request):
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
 
     # Step 1: Handle URL verification
     if payload.get("type") == "url_verification":
