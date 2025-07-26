@@ -51,6 +51,14 @@ def extract_meaningful_changes(diff_content):
     return changes
 
 
+def print_pr_info(title, desc, files_changed, additions, deletions, diff_content):
+    print(f"PR Title: {title}")
+    print(f"PR Description: {desc}")
+    print(f"Files changed: {files_changed}")
+    print(f"Additions: +{additions}, Deletions: -{deletions}")
+    print(f"Diff content length: {len(diff_content)} characters")
+
+
 def get_response_text(response_dict):
     response_text = f"👤 **Author:** {response_dict["author"]}\n"
     response_text += f"📊 **Changes:** {response_dict["files_changed"]} files, +{response_dict["additions"]}/-{response_dict["deletions"]}\n"

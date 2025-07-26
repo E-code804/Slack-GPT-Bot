@@ -1,13 +1,59 @@
 from utils.redis_client import redis_client
+import logging
+from typing import Dict, Optional, Any
 
+logger = logging.getLogger(__name__)
 TTL = 3600  # 1 hour
 
 
-async def set_pr_cache(pr_url: str, pr_dict):
-    await redis_client.hset(name=pr_url, mapping=pr_dict)
-    await redis_client.expire(name=pr_url, time=TTL)
+async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
+    try:
+        pipe = redis_client.pipeline()
+        pipe.hset(name=pr_url, mapping=pr_dict)
+        pipe.expire(name=pr_url, time=TTL)
+        await pipe.execute()
+
+        print(f"Successfully cached PR data for: {pr_url}")
+        # logger.info(f"Successfully cached PR data for: {pr_url}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to cache PR data for {pr_url}: {e}")
+        return False
 
 
-async def get_pr_cache(pr_url: str):
-    pr_cache = await redis_client.hgetall(name=pr_url)
-    return pr_cache
+async def get_pr_cache(pr_url: str) -> Optional[Dict[str, Any]]:
+    try:
+        pr_cache = await redis_client.hgetall(name=pr_url)
+
+        if not pr_cache:
+            print(f"Cache MISS for: {pr_url}")
+            # logger.info(f"Cache MISS for: {pr_url}")
+            return None
+
+        print(f"Cache HIT for: {pr_url}")
+        # logger.info(f"Cache HIT for: {pr_url}")
+        return pr_cache
+
+    except Exception as e:
+        print(f"Failed to retrieve cache for {pr_url}: {e}")
+        # logger.error(f"Failed to retrieve cache for {pr_url}: {e}")
+        return None
+
+
+async def del_pr_cache(pr_url: str) -> bool:
+    try:
+        deleted_count = await redis_client.delete(pr_url)
+
+        if deleted_count > 0:
+            print(f"Successfully deleted cache for: {pr_url}")
+            # logger.info(f"Successfully deleted cache for: {pr_url}")
+            return True
+        else:
+            print(f"No cache found to delete for: {pr_url}")
+            # logger.warning(f"No cache found to delete for: {pr_url}")
+            return False
+
+    except Exception as e:
+        print(f"Failed to delete cache for {pr_url}: {e}")
+        # logger.error(f"Failed to delete cache for {pr_url}: {e}")
+        return False

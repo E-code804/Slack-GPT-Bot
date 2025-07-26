@@ -2,11 +2,13 @@ import os
 
 from services.openai_service import OpenAIService
 from services.slack_service import SlackService
-from services.cache_service import get_pr_cache, set_pr_cache
-from utils.server_utils import get_response_text
+from services.cache_service import del_pr_cache, get_pr_cache, set_pr_cache
+from utils.server_utils import get_response_text, print_pr_info
 import httpx
 
 
+# TODO: Use webhooks to monitor when a PR is merged/updated/reject so cache is updated as well.
+# TODO: Make the else block in a separate function.
 class PRService:
     def __init__(self):
         self.github_token = os.getenv("GITHUB_TOKEN")
@@ -15,15 +17,16 @@ class PRService:
 
     # Background task to process PR and send result back to Slack
     async def process_pr_summary(self, pr_url: str, response_url: str):
-        cached_summary = await get_pr_cache(pr_url=pr_url)
+        try:
+            cached_summary = await get_pr_cache(pr_url=pr_url)
 
-        if cached_summary:
-            response_text = get_response_text(cached_summary)
-            await self.slack_service.send_to_slack_response_url(
-                response_url, response_text
-            )
-        else:
-            try:
+            if cached_summary:
+                response_text = get_response_text(cached_summary)
+                await self.slack_service.send_to_slack_response_url(
+                    response_url, response_text
+                )
+
+            else:
                 parts = pr_url.split("/")
                 owner, repo, pr_number = parts[3], parts[4], parts[6]
 
@@ -58,11 +61,7 @@ class PRService:
                     additions = pr_data.get("additions", 0)
                     deletions = pr_data.get("deletions", 0)
 
-                    # print(f"PR Title: {title}")
-                    # print(f"PR Description: {description}")
-                    # print(f"Files changed: {files_changed}")
-                    # print(f"Additions: +{additions}, Deletions: -{deletions}")
-                    # print(f"Diff content length: {len(diff_content)} characters")
+                    # print_pr_info(title, description, files_changed, additions, deletions, diff_content)
 
                     # Use OpenAI to summarize the PR
                     summary = self.openai_service.summarize_pr(
@@ -71,11 +70,11 @@ class PRService:
 
                     response_dict = {
                         "author": author,
-                        "files_changes": files_changed,
+                        "files_changed": files_changed,
                         "additions": additions,
                         "deletions": deletions,
                         "html_url": html_url,
-                        "status": state,
+                        "state": state,
                         "summary": summary,
                     }
 
@@ -90,19 +89,24 @@ class PRService:
                         response_url, response_text
                     )
 
-            except Exception as e:
-                error_msg = f"❌ Error analyzing PR: {str(e)}"
-                await self.send_to_slack_response_url(response_url, error_msg)
+        except KeyError as key_error:
+            error_msg = f"❌ Missing data in response: {str(key_error)}"
+            print(f"KeyError in process_pr_summary: {key_error}")
+            await self.slack_service.send_to_slack_response_url(response_url, error_msg)
 
-    # # May want to move this to a slack service.
-    # async def send_to_slack_response_url(self, response_url: str, response_text: str):
-    #     # Send delated response back to slack
-    #     try:
-    #         async with httpx.AsyncClient(timeout=10.0) as client:
-    #             payload = {
-    #                 "text": response_text,
-    #                 "response_type": "in_channel",  # or "ephemeral" for private
-    #             }
-    #             await client.post(response_url, json=payload)
-    #     except Exception as e:
-    #         print(f"Failed to send response to Slack: {e}")
+        except httpx.HTTPStatusError as http_error:
+            error_msg = f"❌ GitHub API error: {http_error.response.status_code}"
+            print(f"HTTP error: {http_error}")
+            await self.slack_service.send_to_slack_response_url(response_url, error_msg)
+            await del_pr_cache(pr_url)
+
+        except httpx.TimeoutException:
+            error_msg = "❌ Request timed out. The PR might be too large."
+            print("Timeout error in process_pr_summary")
+            await self.slack_service.send_to_slack_response_url(response_url, error_msg)
+
+        except Exception as e:
+            error_msg = f"❌ Error analyzing PR: {str(e)}"
+            print(f"Unexpected error in process_pr_summary: {e}")
+            await self.slack_service.send_to_slack_response_url(response_url, error_msg)
+            await del_pr_cache(pr_url)
