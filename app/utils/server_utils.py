@@ -49,3 +49,13 @@ def extract_meaningful_changes(diff_content):
             )
 
     return changes
+
+
+def get_response_text(response_dict):
+    response_text = f"👤 **Author:** {response_dict["author"]}\n"
+    response_text += f"📊 **Changes:** {response_dict["files_changed"]} files, +{response_dict["additions"]}/-{response_dict["deletions"]}\n"
+    response_text += f"🔗 **Link:** {response_dict["html_url"]}\n"
+    response_text += f"📂 **Status:** {response_dict["state"]}\n\n"
+    response_text += response_dict["summary"]
+
+    return response_text
