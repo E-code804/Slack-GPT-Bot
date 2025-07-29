@@ -1,5 +1,5 @@
 # FastAPI server entry
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Form
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Header, Request, Form
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -63,3 +63,55 @@ async def handle_summarizepr(
     )
 
     return PlainTextResponse(immediate_resp, status_code=200)
+
+
+# Github Webhooks
+@app.post("/github/postpushes")
+async def handle_github_push(
+    request: Request,
+    x_github_event: str = Header(...),
+    x_github_delivery: str = Header(...),
+    x_hub_signature_256: str = Header(...),
+):
+    payload = await request.json()
+
+    print(f"Event: {x_github_event}")
+    print(f"Delivery ID: {x_github_delivery}")
+    print(f"Signature: {x_hub_signature_256}")
+    print(f"Payload: {payload}")
+
+    return {"status": "received"}
+
+
+@app.post("/github/postprs")
+async def handle_github_push(
+    request: Request,
+    x_github_event: str = Header(...),
+    x_github_delivery: str = Header(...),
+    x_hub_signature_256: str = Header(...),
+):
+    payload = await request.json()
+
+    print(f"Event: {x_github_event}")
+    print(f"Delivery ID: {x_github_delivery}")
+    print(f"Signature: {x_hub_signature_256}")
+    print(f"Payload: {payload}")
+
+    return {"status": "received"}
+
+
+@app.post("/github/postprreviews")
+async def handle_github_push(
+    request: Request,
+    x_github_event: str = Header(...),
+    x_github_delivery: str = Header(...),
+    x_hub_signature_256: str = Header(...),
+):
+    payload = await request.json()
+
+    print(f"Event: {x_github_event}")
+    print(f"Delivery ID: {x_github_delivery}")
+    print(f"Signature: {x_hub_signature_256}")
+    print(f"Payload: {payload}")
+
+    return {"status": "received"}
