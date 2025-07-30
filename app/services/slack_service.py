@@ -3,7 +3,7 @@ import httpx
 
 class SlackService:
     async def send_to_slack_response_url(self, response_url: str, response_text: str):
-        # Send delated response back to slack
+        # Send delayed response back to slack
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 payload = {
