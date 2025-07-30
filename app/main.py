@@ -73,6 +73,74 @@ async def handle_summarizepr(
     return PlainTextResponse(immediate_resp, status_code=200)
 
 
+# TODO - send message in slack channel when a PR is made
+@app.post("/github/postprs")
+async def handle_github_pr_action(
+    request: Request,
+    x_github_event: str = Header(...),
+):
+    try:
+        payload = await request.json()
+        if not payload:
+            print("Received empty body from GitHub webhook")
+            return {"status": "ignored", "message": "Empty request body"}
+
+        pr_action = payload.get("action", None)
+        pr_info = payload.get("pull_request", None)
+        if not pr_action or not pr_info:
+            return {"status": "error", "message": "Missing PR action/info."}
+
+        pr_url = pr_info.get("html_url", None)
+        if not pr_url:
+            return {"status": "error", "message": "Missing PR URL."}
+
+        try:
+            slack_message = f"PR {pr_action} at {pr_url}"
+            # Send to slack
+            result = client.chat_postMessage(
+                channel=os.getenv("SLACK_GPT_BOT_CHANNEL_ID"),
+                text=slack_message,
+            )
+
+            if result["ok"]:
+                print(f"Slack message sent successfully: {result['ts']}")
+                return {
+                    "status": "Success",
+                    "message": "Succeeded to send Slack message",
+                }
+            else:
+                print(f"Slack API returned error: {result}")
+                return {
+                    "status": "error",
+                    "message": "Failed to send Slack message",
+                }
+
+        except SlackApiError as e:
+            print(f"Slack API error: {e.response['error']}")
+            return {
+                "status": "error",
+                "message": f"Slack API error: {e.response['error']}",
+            }
+        except Exception as e:
+            print(f"Unexpected error sending Slack message: {e}")
+            return {
+                "status": "error",
+                "message": "Failed to send Slack notification",
+            }
+
+        # TODO update the pr cache w/ the pr_action
+
+        # Handle other event types
+        print(f"Received GitHub event '{x_github_event}' - no action taken")
+        return {
+            "status": "ignored",
+            "message": f"Event '{x_github_event}' not processed",
+        }
+    except Exception as e:
+        print(f"Unexpected error in GitHub webhook handler: {e}")
+        return {"status": "error", "message": "Internal server error"}
+
+
 # Github Webhooks
 @app.post("/github/postpushes")
 async def handle_github_push(request: Request, x_github_event: str = Header(...)):
@@ -92,11 +160,9 @@ async def handle_github_push(request: Request, x_github_event: str = Header(...)
             merge_info = extract_pr_merge_info(payload, x_github_event)
 
             if merge_info["is_pr_merge"]:
-                # Send to Slack
-                slack_message = f"PR #{merge_info['pr_number']} merged from branch '{merge_info['branch_name']}'"
-                print(slack_message)
-
                 try:
+                    slack_message = f"PR #{merge_info['pr_number']} merged from branch '{merge_info['branch_name']}'"
+                    print(slack_message)
                     # Send to slack
                     result = client.chat_postMessage(
                         channel=os.getenv("SLACK_GPT_BOT_CHANNEL_ID"),
@@ -120,6 +186,10 @@ async def handle_github_push(request: Request, x_github_event: str = Header(...)
                     }
                 except Exception as e:
                     print(f"Unexpected error sending Slack message: {e}")
+                    return {
+                        "status": "error",
+                        "message": "Failed to send Slack notification",
+                    }
 
                 # Update the cache if pr_url already exists. ADD ERROR FOR THIS TOO.
                 try:
@@ -156,25 +226,8 @@ async def handle_github_push(request: Request, x_github_event: str = Header(...)
         return {"status": "error", "message": "Internal server error"}
 
 
-@app.post("/github/postprs")
-async def handle_github_push(
-    request: Request,
-    x_github_event: str = Header(...),
-    x_github_delivery: str = Header(...),
-    x_hub_signature_256: str = Header(...),
-):
-    payload = await request.json()
-
-    print(f"Event: {x_github_event}")
-    print(f"Delivery ID: {x_github_delivery}")
-    print(f"Signature: {x_hub_signature_256}")
-    print(f"Payload: {payload}")
-
-    return {"status": "received"}
-
-
 @app.post("/github/postprreviews")
-async def handle_github_push(
+async def handle_github_pr_reviews(
     request: Request,
     x_github_event: str = Header(...),
     x_github_delivery: str = Header(...),
