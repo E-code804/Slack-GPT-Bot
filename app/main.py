@@ -1,9 +1,16 @@
 # FastAPI server entry
+import os
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Header, Request, Form
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from services.cache_service import update_pr_state_cache
+from utils.server_utils import extract_pr_merge_info
 from services.pr_service import PRService
+
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 # Initialize FastAPI
 app = FastAPI(title="Slack GPT Bot Server")
@@ -17,8 +24,9 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers (e.g. Content-Type)
 )
 
-# Initialize services
+# Initialize services & client
 pr_service = PRService()
+client = WebClient(token=os.getenv("BOT_USER_OAUTH_TOKEN"))
 
 
 # Health check point
@@ -67,20 +75,85 @@ async def handle_summarizepr(
 
 # Github Webhooks
 @app.post("/github/postpushes")
-async def handle_github_push(
-    request: Request,
-    x_github_event: str = Header(...),
-    x_github_delivery: str = Header(...),
-    x_hub_signature_256: str = Header(...),
-):
-    payload = await request.json()
+async def handle_github_push(request: Request, x_github_event: str = Header(...)):
+    try:
+        payload = await request.json()
+        if not payload:
+            print("Received empty body from GitHub webhook")
+            return {"status": "ignored", "message": "Empty request body"}
 
-    print(f"Event: {x_github_event}")
-    print(f"Delivery ID: {x_github_delivery}")
-    print(f"Signature: {x_hub_signature_256}")
-    print(f"Payload: {payload}")
+        # Handle ping events for route verification
+        if x_github_event == "ping":
+            print("Received GitHub webhook ping")
+            return {"status": "pong", "message": "Webhook configured successfully"}
 
-    return {"status": "received"}
+        # Usage in your webhook handler:
+        if x_github_event == "push":
+            merge_info = extract_pr_merge_info(payload, x_github_event)
+
+            if merge_info["is_pr_merge"]:
+                # Send to Slack
+                slack_message = f"PR #{merge_info['pr_number']} merged from branch '{merge_info['branch_name']}'"
+                print(slack_message)
+
+                try:
+                    # Send to slack
+                    result = client.chat_postMessage(
+                        channel=os.getenv("SLACK_GPT_BOT_CHANNEL_ID"),
+                        text=slack_message,
+                    )
+
+                    if result["ok"]:
+                        print(f"Slack message sent successfully: {result['ts']}")
+                    else:
+                        print(f"Slack API returned error: {result}")
+                        return {
+                            "status": "error",
+                            "message": "Failed to send Slack message",
+                        }
+
+                except SlackApiError as e:
+                    print(f"Slack API error: {e.response['error']}")
+                    return {
+                        "status": "error",
+                        "message": f"Slack API error: {e.response['error']}",
+                    }
+                except Exception as e:
+                    print(f"Unexpected error sending Slack message: {e}")
+
+                # Update the cache if pr_url already exists. ADD ERROR FOR THIS TOO.
+                try:
+                    cache_updated = await update_pr_state_cache(
+                        merge_info["pr_url"], "merged"
+                    )
+                    if cache_updated:
+                        print(f"Cache updated for PR: {merge_info['pr_url']}")
+                    else:
+                        print(f"No existing cache found for PR: {merge_info['pr_url']}")
+                except Exception as e:
+                    print(
+                        f"Failed to update cache for PR {merge_info.get('pr_url')}: {e}"
+                    )
+                    # Don't return error - cache update failure shouldn't fail the webhook
+
+                return {
+                    "status": "success",
+                    "message": "PR merge processed and Slack notification sent",
+                    "pr_number": merge_info["pr_number"],
+                }
+            else:
+                print(f"Push event received but not a PR merge: {payload.get('ref')}")
+                return {"status": "ignored", "message": "Push event but not a PR merge"}
+
+        # Handle other event types
+        print(f"Received GitHub event '{x_github_event}' - no action taken")
+        return {
+            "status": "ignored",
+            "message": f"Event '{x_github_event}' not processed",
+        }
+    except Exception as e:
+        print(f"Unexpected error in GitHub webhook handler: {e}")
+        return {"status": "error", "message": "Internal server error"}
 
 
 @app.post("/github/postprs")

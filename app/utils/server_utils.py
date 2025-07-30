@@ -67,3 +67,39 @@ def get_response_text(response_dict):
     response_text += response_dict["summary"]
 
     return response_text
+
+
+# Extract relevant info for PR merge detection
+def extract_pr_merge_info(payload, x_github_event):
+    # Check if this is a push to main branch
+    if x_github_event == "push" and payload.get("ref") == "refs/heads/main":
+
+        # Check if the head commit is a merge commit (contains "Merge pull request")
+        head_commit = payload.get("head_commit", {})
+        commit_message = head_commit.get("message", "")
+
+        if "Merge pull request" in commit_message:
+            # Extract PR number from commit message
+            import re
+
+            pr_match = re.search(r"Merge pull request #(\d+)", commit_message)
+            pr_number = pr_match.group(1) if pr_match else None
+
+            # Extract branch name from commit message
+            branch_match = re.search(r"from .+/(.+)", commit_message)
+            branch_name = branch_match.group(1) if branch_match else None
+
+            pr_url = "https://github.com/E-code804/Slack-GPT-Bot/pull/" + pr_number
+
+            return {
+                "is_pr_merge": True,
+                "pr_number": pr_number,
+                "branch_name": branch_name,
+                "commit_sha": head_commit.get("id"),
+                "author": head_commit.get("author", {}).get("name"),
+                "repo_name": payload.get("repository", {}).get("name"),
+                "commit_message": commit_message,
+                "pr_url": pr_url,
+            }
+
+    return {"is_pr_merge": False}
