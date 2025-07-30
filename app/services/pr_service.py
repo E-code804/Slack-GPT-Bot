@@ -93,6 +93,7 @@ class PRService:
             error_msg = f"❌ Missing data in response: {str(key_error)}"
             print(f"KeyError in process_pr_summary: {key_error}")
             await self.slack_service.send_to_slack_response_url(response_url, error_msg)
+            await del_pr_cache(pr_url)
 
         except httpx.HTTPStatusError as http_error:
             error_msg = f"❌ GitHub API error: {http_error.response.status_code}"

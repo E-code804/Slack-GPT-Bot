@@ -21,6 +21,35 @@ async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
         return False
 
 
+async def update_pr_state_cache(pr_url: str, new_state: str) -> bool:
+    try:
+        exists = await redis_client.exists(pr_url)
+
+        if not exists:
+            print(f"No existing cache for: {pr_url}")
+            return True
+
+        await redis_client.hset(name=pr_url, key="state", value=new_state)
+        print(f"Successfully updated state to '{new_state}' for: {pr_url}")
+        return True
+    except Exception as e:
+        # logger.error(f"Failed to update state for {pr_url}: {e}")
+        print(f"Failed to update state for {pr_url}: {e}")
+        return False
+
+
+async def update_pr_cache_fields(pr_url: str, updates: Dict[str, Any]) -> bool:
+    """Update multiple fields in the cached PR data"""
+    try:
+        await redis_client.hset(name=pr_url, mapping=updates)
+
+        print(f"Successfully updated fields {list(updates.keys())} for: {pr_url}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update fields for {pr_url}: {e}")
+        return False
+
+
 async def get_pr_cache(pr_url: str) -> Optional[Dict[str, Any]]:
     try:
         pr_cache = await redis_client.hgetall(name=pr_url)
