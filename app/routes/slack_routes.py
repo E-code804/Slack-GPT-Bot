@@ -20,8 +20,6 @@ async def handle_summarizepr(
             "Please provide a valid GitHub PR link.", status_code=200
         )
 
-    print(response_url)
-
     background_tasks.add_task(pr_service.process_pr_summary, text, response_url)
     immediate_response = (
         "🔄 Analyzing PR... This may take a moment. I'll update you shortly!"
