@@ -24,7 +24,8 @@ async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
 async def update_pr_state_cache(pr_url: str, new_state: str) -> Dict[str, Any]:
     try:
         exists = await redis_client.exists(pr_url)
-
+        print(exists)
+        # TODO: If previous state was "merged" and incoming is closed, return ignored
         if not exists:
             print(f"No existing cache for: {pr_url}")
             return {
