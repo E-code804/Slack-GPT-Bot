@@ -21,7 +21,7 @@ async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
         return False
 
 
-async def update_pr_state_cache(pr_url: str, new_state: str):
+async def update_pr_state_cache(pr_url: str, new_state: str) -> Dict[str, Any]:
     try:
         exists = await redis_client.exists(pr_url)
 
