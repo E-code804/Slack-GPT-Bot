@@ -1,4 +1,5 @@
 import os
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request, Header
 
@@ -16,15 +17,15 @@ pr_service = PRService()
 @router.post("/postpushes")
 async def handle_github_push(request: Request, x_github_event: str = Header(...)):
     try:
-        payload = await request.json()
-        if not payload:
-            print("Received empty body from GitHub webhook")
-            return {"status": "ignored", "message": "Empty request body"}
-
         # Handle ping events for route verification
         if x_github_event == "ping":
             print("Received GitHub webhook ping")
             return {"status": "pong", "message": "Webhook configured successfully"}
+
+        payload = await request.json()
+        if not payload:
+            print("Received empty body from GitHub webhook")
+            return {"status": "ignored", "message": "Empty request body"}
 
         # Usage in your webhook handler:
         if x_github_event == "push":
@@ -45,13 +46,7 @@ async def handle_github_push(request: Request, x_github_event: str = Header(...)
                 cache_result = await update_pr_state_cache(
                     pr_url=merge_info["pr_url"], new_state="merged"
                 )
-                if cache_result["status"] == "success":
-                    print(f"Cache updated: {cache_result['message']}")
-                elif cache_result["status"] == "ignored":
-                    print(f"Cache update skipped: {cache_result['message']}")
-                elif cache_result["status"] == "error":
-                    print(f"Cache update failed: {cache_result['message']}")
-                    # Don't return error - cache failures shouldn't stop webhook processing
+                handle_cache_logging(cache_result=cache_result)
 
                 return {
                     "status": "success",
@@ -80,15 +75,16 @@ async def handle_github_pr_action(
     x_github_event: str = Header(...),
 ):
     try:
-        payload = await request.json()
-        if not payload:
-            print("Received empty body from GitHub webhook")
-            return {"status": "ignored", "message": "Empty request body"}
-
         # Handle ping events for route verification
         if x_github_event == "ping":
             print("Received GitHub webhook ping")
             return {"status": "pong", "message": "Webhook configured successfully"}
+
+        # Handle verification of required information.
+        payload = await request.json()
+        if not payload:
+            print("Received empty body from GitHub webhook")
+            return {"status": "ignored", "message": "Empty request body"}
 
         pr_action = payload.get("action", None)
         pr_info = payload.get("pull_request", None)
@@ -109,13 +105,7 @@ async def handle_github_pr_action(
 
         # Update the pr cache w/ the pr_action
         cache_result = await update_pr_state_cache(pr_url, pr_action)
-        if cache_result["status"] == "success":
-            print(f"Cache updated: {cache_result['message']}")
-        elif cache_result["status"] == "ignored":
-            print(f"Cache update skipped: {cache_result['message']}")
-        elif cache_result["status"] == "error":
-            print(f"Cache update failed: {cache_result['message']}")
-            # Don't return error - cache failures shouldn't stop webhook processing
+        handle_cache_logging(cache_result=cache_result)
 
         print(f"Received GitHub event '{x_github_event}'.")
         return {
@@ -142,3 +132,13 @@ async def handle_github_pr_reviews(
     print(f"Payload: {payload}")
 
     return {"status": "received"}
+
+
+def handle_cache_logging(cache_result: Dict[str, Any]) -> None:
+    if cache_result["status"] == "success":
+        print(f"Cache updated: {cache_result['message']}")
+    elif cache_result["status"] == "ignored":
+        print(f"Cache update skipped: {cache_result['message']}")
+    elif cache_result["status"] == "error":
+        print(f"Cache update failed: {cache_result['message']}")
+        # Don't return error - cache failures shouldn't stop webhook processing
