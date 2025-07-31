@@ -1,21 +1,67 @@
 import os
+import httpx
 
 from services.openai_service import OpenAIService
 from services.slack_service import SlackService
-from services.cache_service import del_pr_cache, get_pr_cache, set_pr_cache
-from utils.server_utils import get_response_text, print_pr_info
-import httpx
+from services.cache_service import (
+    del_pr_cache,
+    get_pr_cache,
+    set_pr_cache,
+    update_pr_state_cache,
+)
+
+from utils.server_utils import get_response_text
+
+from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 
 # TODO: Use webhooks to monitor when a PR is merged/updated/reject so cache is updated as well.
-# TODO: Make the else block in a separate function.
 class PRService:
     def __init__(self):
         self.github_token = os.getenv("GITHUB_TOKEN")
         self.openai_service = OpenAIService()
         self.slack_service = SlackService()
+        self.client = WebClient(token=os.getenv("BOT_USER_OAUTH_TOKEN"))
+
+    # Handle sending messages to a slack channel
+    async def send_msg_to_slack_channel(self, slack_message: str, channel: str):
+        try:
+            # Send to slack
+            result = self.client.chat_postMessage(
+                channel=os.getenv("SLACK_GPT_BOT_CHANNEL_ID"),
+                text=slack_message,
+            )
+
+            if result["ok"]:
+                print(f"Slack message sent successfully: {result['ts']}")
+                return {
+                    "status": "success",
+                    "message": "Slack message sent successfully",
+                    "data": {"timestamp": result["ts"], "channel": result["channel"]},
+                }
+            else:
+                print(f"Slack API returned error: {result}")
+                return {
+                    "status": "error",
+                    "message": "Failed to send Slack message",
+                }
+
+        except SlackApiError as e:
+            print(f"Slack API error: {e.response['error']}")
+            return {
+                "status": "error",
+                "message": f"Slack API error: {e.response['error']}",
+            }
+        except Exception as e:
+            print(f"Unexpected error sending Slack message: {e}")
+            return {
+                "status": "error",
+                "message": "Failed to send Slack notification",
+            }
 
     # Background task to process PR and send result back to Slack
+    # TODO: Make the else block in a separate function.
     async def process_pr_summary(self, pr_url: str, response_url: str):
         try:
             cached_summary = await get_pr_cache(pr_url=pr_url)

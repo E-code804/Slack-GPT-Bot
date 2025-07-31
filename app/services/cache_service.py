@@ -21,21 +21,33 @@ async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
         return False
 
 
-async def update_pr_state_cache(pr_url: str, new_state: str) -> bool:
+async def update_pr_state_cache(pr_url: str, new_state: str):
     try:
         exists = await redis_client.exists(pr_url)
 
         if not exists:
             print(f"No existing cache for: {pr_url}")
-            return True
+            return {
+                "status": "ignored",
+                "message": "No existing cache entry found",
+                "data": {"pr_url": pr_url},
+            }
 
         await redis_client.hset(name=pr_url, key="state", value=new_state)
         print(f"Successfully updated state to '{new_state}' for: {pr_url}")
-        return True
+        return {
+            "status": "success",
+            "message": f"Cache updated to state '{new_state}'",
+            "data": {"pr_url": pr_url, "new_state": new_state},
+        }
     except Exception as e:
         # logger.error(f"Failed to update state for {pr_url}: {e}")
         print(f"Failed to update state for {pr_url}: {e}")
-        return False
+        return {
+            "status": "error",
+            "message": f"Cache update failed: {str(e)}",
+            "data": {"pr_url": pr_url},
+        }
 
 
 async def update_pr_cache_fields(pr_url: str, updates: Dict[str, Any]) -> bool:
