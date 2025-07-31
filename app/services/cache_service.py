@@ -23,15 +23,27 @@ async def set_pr_cache(pr_url: str, pr_dict: Dict[str, Any]) -> bool:
 
 async def update_pr_state_cache(pr_url: str, new_state: str) -> Dict[str, Any]:
     try:
-        exists = await redis_client.exists(pr_url)
-        print(exists)
-        # TODO: If previous state was "merged" and incoming is closed, return ignored
-        if not exists:
+        current_state = await redis_client.hget(pr_url, "state")
+
+        # Do not update cache if pr_url DNE in redis or PR has already been merged
+        if not current_state:
             print(f"No existing cache for: {pr_url}")
             return {
                 "status": "ignored",
                 "message": "No existing cache entry found",
                 "data": {"pr_url": pr_url},
+            }
+
+        if current_state == "merged" and new_state == "closed":
+            print(f"Ignoring state change from 'merged' to 'closed' for: {pr_url}")
+            return {
+                "status": "ignored",
+                "message": "Cannot change state from 'merged' to 'closed'",
+                "data": {
+                    "pr_url": pr_url,
+                    "current_state": current_state,
+                    "attempted_state": new_state,
+                },
             }
 
         await redis_client.hset(name=pr_url, key="state", value=new_state)
