@@ -35,17 +35,13 @@ async def handle_github_push(request: Request, x_github_event: str = Header(...)
                 # Send message to slack channel
                 slack_msg = f"PR #{merge_info['pr_number']} merged from branch '{merge_info['branch_name']}'"
                 channel = os.getenv("SLACK_GPT_BOT_CHANNEL_ID")
-                slack_result = await pr_service.send_msg_to_slack_channel(
-                    slack_msg, channel
-                )
-                if slack_result["status"] == "error":
+                slack_result = await pr_service.send_msg_to_slack_channel(slack_msg, channel)
+                if slack_result.status == "error":
                     print(f"Failed to send Slack message: {slack_result['message']}")
                     return {"status": "error", "message": slack_result["message"]}
 
                 # Update the pr cache w/ the pr_action
-                cache_result = await update_pr_state_cache(
-                    pr_url=merge_info["pr_url"], new_state="merged"
-                )
+                cache_result = await update_pr_state_cache(pr_url=merge_info["pr_url"], new_state="merged")
                 handle_cache_logging(cache_result=cache_result)
 
                 return {
@@ -99,7 +95,7 @@ async def handle_github_pr_action(
         slack_msg = f"PR {pr_action} at {pr_url}"
         channel = os.getenv("SLACK_GPT_BOT_CHANNEL_ID")
         slack_result = await pr_service.send_msg_to_slack_channel(slack_msg, channel)
-        if slack_result["status"] == "error":
+        if slack_result.status == "error":
             print(f"Failed to send Slack message: {slack_result['message']}")
             return {"status": "error", "message": slack_result["message"]}
 
