@@ -16,13 +16,9 @@ async def handle_summarizepr(
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ):
     if "github.com" not in text or "/pull/" not in text:
-        return PlainTextResponse(
-            "Please provide a valid GitHub PR link.", status_code=200
-        )
+        return PlainTextResponse("Please provide a valid GitHub PR link.", status_code=200)
 
     background_tasks.add_task(pr_service.process_pr_summary, text, response_url)
-    immediate_response = (
-        "🔄 Analyzing PR... This may take a moment. I'll update you shortly!"
-    )
+    immediate_response = "🔄 Analyzing PR... This may take a moment. I'll update you shortly!"
 
     return PlainTextResponse(immediate_response, status_code=200)
